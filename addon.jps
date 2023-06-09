@@ -7,9 +7,9 @@ baseUrl: https://raw.githubusercontent.com/jelastic-jps/wordpress-import-addon/m
 
 onBeforeInit: | 
   // CHANGE VARIABLES
-  const targetUID = 2391;
+  const targetUID = 3255;
   
-  const envName = "env-5859788";
+  const envName = "env-4033325";
   const ssh_host = "198.244.136.252";
   const ssh_port = 22;
   const ssh_user = "root";
@@ -186,9 +186,19 @@ responses:
     message: |
       Errors were discovered during the project migration.
       Please check the **/var/log/migrator.log** log file on master node of CP layer for details.
+
 onInstall:
+  - script: |
+      // Signin As Client
+      var resp = jelastic.system.admin.SigninAsClient("cluster", session, "${settings.targetUID}");
+      if (resp.result != 0) return resp;
+      return { result: 0, onAfterReturn: { setGlobals: { userSession: resp.session } } };
+  - updateProjectStatuses
+
+1onInstall:
   - log: '${settings}'
   - deployProjects
+  - updateProjectStatuses
 
 globals:
   migration_dir: /home/jelastic/migrator
@@ -260,15 +270,17 @@ actions:
         if ( resp.result != 0 ) return resp;
 
         // Creating envs and migration projects
-        var tableName = "${globals.tableName}";
-        var env_name, createObject;
+        let tableName = "${globals.tableName}";
+        let envName, createObject;
+        let envNames = [];
         for (var i = 0, n = projectList.length; i < n; i ++) {
           projectPHPverion = JSON.parse(resp.responses[0].out).find(x => x.id === parseInt(projectList[i])).php_version;
           parts = projectPHPverion.split(".");     
           enginePHP = "php" + parts.slice(0, 2).join(".");
-          env_name = generateEnvName();      
+          envName = generateEnvName();  
+          envNames.push(envName);
           createObject = api.data.base.CreateObject(tableName, {
-            envName: env_name,
+            envName: envName,
             projectName:  projectList[i],
             uid: targetUID,
             status: "failed"
@@ -278,7 +290,7 @@ actions:
             jps: "${baseUrl}/scripts/createEnvironment.jps?_r=${fn.random}",
             settings: {
               "master_env": envName,
-              "env_name": env_name,
+              "env_name": envName,
               "php_engine": enginePHP,
               "project_id": projectList[i],
               "wpenv_file_content": wpenv_file_content.body,
@@ -289,9 +301,53 @@ actions:
             }
           });
         }        
-        return { result: 0, onAfterReturn: { 'marketplace.jps.install': actions } };
-    
-    - script: |
-        // Signout
-        return jelastic.users.authentication.Signout("cluster", "${globals.userSession");
-        
+        return { result: 0, onAfterReturn: [{ 
+        'marketplace.jps.install': actions 
+        }, {
+          'setGlobals': {
+            envNames: envNames
+          }
+        }] };
+
+  updateProjectStatuses:
+    script: |
+      let base = api.data.base;
+      let targetUID = '${settings.targetUID}';
+      let tableName = "${globals.tableName}";
+      const CP = "cp";
+      const count = 100;
+      let from = 0;
+      let resp, imports = [];
+      let criteria = {
+        envName: "${globals.envNames}"
+      };
+      criteria = {
+        envName: "wp-44847540"
+      };
+      
+      while (true) {
+        resp = base.GetObjectsByCriteria(appid, session, tableName, criteria, from, count);
+        from += count;
+        if (resp.result != 0) return resp;
+        if (resp.objects.length == 0) break;
+        imports = imports.concat(resp.objects);
+      }
+      
+      for (let i = 0, n = imports.length; i < n; i++) {
+        if (imports[i].envName) {
+          resp = api.env.control.ExecCmdByGroup(imports[i].envName, "${globals.userSession}", CP, toJSON([{command: "cat /var/lib/jelastic/keys/migrator/status"}]), true, false);
+          if (resp.result != 0) return resp;
+          api.marketplace.console.WriteLog("resp->" + resp);
+          if (resp.responses && resp.responses[0] && resp.responses[0].out) {
+            resp = base.SetProperty(appid, session, tableName, imports[i].id, "status", resp.responses[0].out)
+            if (resp.result != 0) return resp;
+          }
+        }
+      }
+
+      return { result: 0 }
+      
+  signout:
+    script: |
+      // Signout
+      return jelastic.users.authentication.Signout("cluster", "${globals.userSession");
