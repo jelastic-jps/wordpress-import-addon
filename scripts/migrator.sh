@@ -315,10 +315,11 @@ importProject(){
   ### Delete custom define wp-jelastic.php
   sed -i '/wp-jelastic.php/d' ${WP_CONFIG}
 
-  #createRemoteDbBackupWPT $INSTANCE_ID
+  createRemoteDbBackupWPT $INSTANCE_ID
+  
   REMOTE_DIR=$(getArgFromJSON $INSTANCE_ID "fullPath")
-  local remote_db_name=$(getRemoteDBnameWPT $INSTANCE_ID)
-  createRemoteDbBackupMysqlDump "$remote_db_name" "$REMOTE_DIR"
+  #local remote_db_name=$(getRemoteDBnameWPT $INSTANCE_ID)
+  #createRemoteDbBackupMysqlDump "$remote_db_name" "$REMOTE_DIR"
 
   execAction "downloadProject $REMOTE_DIR" "Downloading $REMOTE_DIR from remote host to ${BACKUP_DIR}"
   addVariable DB_USER $(getWPconfigVariable DB_USER)

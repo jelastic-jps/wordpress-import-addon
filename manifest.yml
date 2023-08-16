@@ -25,7 +25,7 @@ onBeforeDelete:
 actions:
   installDependencies:
     - cmd[cp]: |-
-        rpm -qa | grep -qw sshpass || yum install sshpass -y;
+        grep -a 'AlmaLinux' /etc/system-release && microdnf -y install sshpass || yum install sshpass -y;
         echo "WordPress migrator add-on logs" > /var/log/migrator.log;
         chown jelastic /var/log/migrator.log;
       user: root

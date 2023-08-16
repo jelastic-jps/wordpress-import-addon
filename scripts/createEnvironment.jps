@@ -78,7 +78,7 @@ actions:
 
   installDependencies:
     - script: |
-        var cmd1 = "rpm -qa | grep -qw sshpass || yum install sshpass -y;";
+        var cmd1 = "grep -a 'AlmaLinux' /etc/system-release && microdnf -y install sshpass || yum install sshpass -y;";
         var cmd2 = "echo 'WordPress migrator add-on logs' > /var/log/migrator.log;";
         var cmd3 = "chown jelastic /var/log/migrator.log;";
         return api.environment.control.ExecCmdById({
